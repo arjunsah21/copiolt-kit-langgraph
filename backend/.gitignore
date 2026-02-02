@@ -1,0 +1,9 @@
+# Python-specific build artifacts
+*.so
+*.egg
+*.egg-info/
+
+# Python cache and tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

@@ -1,0 +1,30 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node.js
+node_modules/
+
+# Environment files
+.env
+.env.local
+
+# Editor/IDE
+.cursor/
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+
+# Build artifacts
+dist/
+build/
+
+# Test coverage
+.coverage
+htmlcov/
