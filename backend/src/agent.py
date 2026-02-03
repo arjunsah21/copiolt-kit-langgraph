@@ -11,45 +11,11 @@ import operator
 
 from src.tools import get_weather, get_nearby_restaurants
 from src.logger import log_agent_start, log_error
-from langchain_core.callbacks import BaseCallbackHandler
 
 try:
     from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 except Exception:
     LangfuseCallbackHandler = None
-
-DEBUG_LOG_PATH = "/Users/arjun.kumar/learnings/genai/copilot-kit/.cursor/debug.log"
-
-
-def _debug_log(payload: dict) -> None:
-    try:
-        payload["timestamp"] = int(time.time() * 1000)
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as log_file:
-            log_file.write(json.dumps(payload) + "\n")
-    except Exception:
-        pass
-
-
-class DebugCallbackHandler(BaseCallbackHandler):
-    def on_chain_start(self, serialized, inputs, run_id, parent_run_id=None, **kwargs):
-        input_keys = list(inputs.keys()) if isinstance(inputs, dict) else type(inputs).__name__
-        # region agent log
-        _debug_log(
-            {
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "B",
-                "location": "agent.py:DebugCallbackHandler.on_chain_start",
-                "message": "chain_start",
-                "data": {
-                    "runId": str(run_id),
-                    "parentRunId": str(parent_run_id) if parent_run_id else None,
-                    "name": (serialized or {}).get("name"),
-                    "inputKeys": input_keys,
-                },
-            }
-        )
-        # endregion
 
 
 def _summarize_outputs(outputs) -> dict | None:
@@ -93,21 +59,6 @@ if LangfuseCallbackHandler:
                         name=self._trace_name,
                         input=self._input_summary,
                     )
-                    # region agent log
-                    _debug_log(
-                        {
-                            "sessionId": "debug-session",
-                            "runId": "pre-fix",
-                            "hypothesisId": "D",
-                            "location": "agent.py:LocalLangfuseCallbackHandler.on_chain_start",
-                            "message": "trace_update_input",
-                            "data": {
-                                "traceName": self._trace_name,
-                                "hasInputSummary": True,
-                            },
-                        }
-                    )
-                    # endregion
 
         def on_chain_end(self, outputs, run_id, parent_run_id=None, **kwargs):
             super().on_chain_end(
@@ -122,37 +73,6 @@ if LangfuseCallbackHandler:
                     span = self.runs.get(run_id)
                     if span:
                         span.update_trace(output=summary)
-                        # region agent log
-                        _debug_log(
-                            {
-                                "sessionId": "debug-session",
-                                "runId": "pre-fix",
-                                "hypothesisId": "D",
-                                "location": "agent.py:LocalLangfuseCallbackHandler.on_chain_end",
-                                "message": "trace_update_output",
-                                "data": {"hasOutputSummary": True},
-                            }
-                        )
-                        # endregion
-
-    def on_chain_end(self, outputs, run_id, parent_run_id=None, **kwargs):
-        output_keys = list(outputs.keys()) if isinstance(outputs, dict) else type(outputs).__name__
-        # region agent log
-        _debug_log(
-            {
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "C",
-                "location": "agent.py:DebugCallbackHandler.on_chain_end",
-                "message": "chain_end",
-                "data": {
-                    "runId": str(run_id),
-                    "parentRunId": str(parent_run_id) if parent_run_id else None,
-                    "outputKeys": output_keys,
-                },
-            }
-        )
-        # endregion
 
 
 def _check_langfuse_connection(host: str, timeout: float = 2.0) -> bool:
@@ -184,51 +104,15 @@ def _build_langfuse_callbacks(
     latitude: float,
     longitude: float,
 ) -> tuple[list, str | None]:
-    callbacks: list = [DebugCallbackHandler()]
+    callbacks: list = []
     if LangfuseCallbackHandler is None:
-        # region agent log
-        _debug_log(
-            {
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "A",
-                "location": "agent.py:_build_langfuse_callbacks",
-                "message": "langfuse_handler_unavailable",
-                "data": {"reason": "import_failed"},
-            }
-        )
-        # endregion
         return callbacks, None
     if not os.getenv("LANGFUSE_PUBLIC_KEY") or not os.getenv("LANGFUSE_SECRET_KEY"):
-        # region agent log
-        _debug_log(
-            {
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "A",
-                "location": "agent.py:_build_langfuse_callbacks",
-                "message": "langfuse_handler_unavailable",
-                "data": {"reason": "missing_keys"},
-            }
-        )
-        # endregion
         return callbacks, None
 
     # Check if Langfuse is reachable
     langfuse_host = os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
     if not _check_langfuse_connection(langfuse_host):
-        # region agent log
-        _debug_log(
-            {
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "A",
-                "location": "agent.py:_build_langfuse_callbacks",
-                "message": "langfuse_handler_unavailable",
-                "data": {"reason": "connection_failed", "host": langfuse_host},
-            }
-        )
-        # endregion
         return callbacks, None
 
     trace_id = uuid.uuid4().hex
@@ -249,37 +133,11 @@ def _build_langfuse_callbacks(
             input_summary=input_summary,
         )
         callbacks.append(handler)
-        # region agent log
-        _debug_log(
-            {
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "A",
-                "location": "agent.py:_build_langfuse_callbacks",
-                "message": "langfuse_handler_ready",
-                "data": {
-                    "callbacksCount": len(callbacks),
-                    "traceIdSet": bool(trace_id),
-                    "updateTrace": True,
-                },
-            }
-        )
-        # endregion
         return callbacks, trace_id
     except Exception as e:
         # If handler creation fails, log and continue without tracing
         from src.logger import logger
         logger.info(f"Failed to create Langfuse handler: {e} - skipping tracing")
-        _debug_log(
-            {
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "A",
-                "location": "agent.py:_build_langfuse_callbacks",
-                "message": "langfuse_handler_creation_failed",
-                "data": {"error": str(e)},
-            }
-        )
         return callbacks, None
 
 
@@ -507,22 +365,7 @@ The weather is currently {conditions.lower()} with a temperature of {temp}°C.""
             latitude,
             longitude,
         )
-        # region agent log
-        _debug_log(
-            {
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "A",
-                "location": "agent.py:run",
-                "message": "graph_invoke_start",
-                "data": {
-                    "callbacksCount": len(callbacks),
-                    "traceIdSet": bool(trace_id),
-                    "messageLength": len(user_message),
-                },
-            }
-        )
-        # endregion
+        
         if callbacks and trace_id:
             final_state = await self.graph.ainvoke(
                 initial_state,

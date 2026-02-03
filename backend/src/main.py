@@ -49,11 +49,6 @@ try:
         logger.info("Langfuse tracing disabled (no keys provided)")
 except Exception as e:
     logger.warning(f"Langfuse not available - tracing disabled: {e}")
-    # Create a no-op decorator
-    def observe(name=None):
-        def decorator(func):
-            return func
-        return decorator
 
 
 # Global agent instance
