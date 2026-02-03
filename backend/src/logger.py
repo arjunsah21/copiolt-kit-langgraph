@@ -3,16 +3,44 @@ import sys
 from datetime import datetime
 from typing import Any, Dict
 
-# Configure basic logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+# Configure logging
+def setup_logging():
+    """Configure logging for the application"""
+    # Create a formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
+    
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    # Remove existing handlers to avoid duplicates
+    if root_logger.handlers:
+        root_logger.handlers.clear()
+    root_logger.addHandler(console_handler)
+    
+    # Configure src logger
+    src_logger = logging.getLogger("src")
+    src_logger.setLevel(logging.INFO)
+    src_logger.propagate = False  # Don't propagate to root if we handle it
+    if src_logger.handlers:
+        src_logger.handlers.clear()
+    src_logger.addHandler(console_handler)
+    
+    # Configure Uvicorn loggers explicitly
+    for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error"]:
+        u_logger = logging.getLogger(logger_name)
+        u_logger.setLevel(logging.INFO)
+        u_logger.propagate = False # Uvicorn handles its own propagation usually, but we want to control it
+        if u_logger.handlers:
+            u_logger.handlers.clear()
+        u_logger.addHandler(console_handler)
 
-logger = logging.getLogger(__name__)
+# Apply configuration immediately
+setup_logging()
+logger = logging.getLogger("src")
 
 
 def log_request(endpoint: str, data: dict):
