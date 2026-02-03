@@ -155,6 +155,30 @@ if LangfuseCallbackHandler:
         # endregion
 
 
+def _check_langfuse_connection(host: str, timeout: float = 2.0) -> bool:
+    """
+    Check if Langfuse is reachable at the given host.
+    
+    Args:
+        host: Langfuse host URL (e.g., "http://localhost:3000")
+        timeout: Connection timeout in seconds
+    
+    Returns:
+        True if Langfuse is reachable, False otherwise
+    """
+    import httpx
+    from src.logger import logger
+    
+    try:
+        # Try to reach the Langfuse health endpoint or root
+        response = httpx.get(f"{host}/api/public/health", timeout=timeout)
+        return response.status_code < 500
+    except Exception:
+        # If connection fails, Langfuse is not reachable
+        logger.info(f"Langfuse is not running at {host} - skipping tracing")
+        return False
+
+
 def _build_langfuse_callbacks(
     user_message: str,
     latitude: float,
@@ -190,6 +214,23 @@ def _build_langfuse_callbacks(
         # endregion
         return callbacks, None
 
+    # Check if Langfuse is reachable
+    langfuse_host = os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
+    if not _check_langfuse_connection(langfuse_host):
+        # region agent log
+        _debug_log(
+            {
+                "sessionId": "debug-session",
+                "runId": "pre-fix",
+                "hypothesisId": "A",
+                "location": "agent.py:_build_langfuse_callbacks",
+                "message": "langfuse_handler_unavailable",
+                "data": {"reason": "connection_failed", "host": langfuse_host},
+            }
+        )
+        # endregion
+        return callbacks, None
+
     trace_id = uuid.uuid4().hex
     # Create a descriptive trace name with user message preview
     message_preview = user_message[:50] + "..." if len(user_message) > 50 else user_message
@@ -199,30 +240,48 @@ def _build_langfuse_callbacks(
         "latitude": latitude,
         "longitude": longitude,
     }
-    handler = LocalLangfuseCallbackHandler(
-        trace_context={"trace_id": trace_id},
-        update_trace=True,
-        trace_name=trace_name,
-        input_summary=input_summary,
-    )
-    callbacks.append(handler)
-    # region agent log
-    _debug_log(
-        {
-            "sessionId": "debug-session",
-            "runId": "pre-fix",
-            "hypothesisId": "A",
-            "location": "agent.py:_build_langfuse_callbacks",
-            "message": "langfuse_handler_ready",
-            "data": {
-                "callbacksCount": len(callbacks),
-                "traceIdSet": bool(trace_id),
-                "updateTrace": True,
-            },
-        }
-    )
-    # endregion
-    return callbacks, trace_id
+    
+    try:
+        handler = LocalLangfuseCallbackHandler(
+            trace_context={"trace_id": trace_id},
+            update_trace=True,
+            trace_name=trace_name,
+            input_summary=input_summary,
+        )
+        callbacks.append(handler)
+        # region agent log
+        _debug_log(
+            {
+                "sessionId": "debug-session",
+                "runId": "pre-fix",
+                "hypothesisId": "A",
+                "location": "agent.py:_build_langfuse_callbacks",
+                "message": "langfuse_handler_ready",
+                "data": {
+                    "callbacksCount": len(callbacks),
+                    "traceIdSet": bool(trace_id),
+                    "updateTrace": True,
+                },
+            }
+        )
+        # endregion
+        return callbacks, trace_id
+    except Exception as e:
+        # If handler creation fails, log and continue without tracing
+        from src.logger import logger
+        logger.info(f"Failed to create Langfuse handler: {e} - skipping tracing")
+        _debug_log(
+            {
+                "sessionId": "debug-session",
+                "runId": "pre-fix",
+                "hypothesisId": "A",
+                "location": "agent.py:_build_langfuse_callbacks",
+                "message": "langfuse_handler_creation_failed",
+                "data": {"error": str(e)},
+            }
+        )
+        return callbacks, None
+
 
 
 class AgentState(TypedDict):

@@ -20,20 +20,35 @@ load_dotenv()
 # Initialize Langfuse (optional - only if keys are provided)
 langfuse_client = None
 
+def _check_langfuse_reachable(host: str, timeout: float = 2.0) -> bool:
+    """Check if Langfuse is reachable at the given host."""
+    import httpx
+    try:
+        response = httpx.get(f"{host}/api/public/health", timeout=timeout)
+        return response.status_code < 500
+    except Exception:
+        return False
+
 try:
     from langfuse import Langfuse
 
     if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
-        langfuse_client = Langfuse(
-            secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-            public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
-        )
-        logger.info("Langfuse tracing enabled")
+        langfuse_host = os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
+        
+        # Check if Langfuse is reachable before initializing
+        if _check_langfuse_reachable(langfuse_host):
+            langfuse_client = Langfuse(
+                secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+                public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+                host=langfuse_host
+            )
+            logger.info(f"Langfuse tracing enabled at {langfuse_host}")
+        else:
+            logger.info(f"Langfuse is not running at {langfuse_host} - skipping tracing")
     else:
         logger.info("Langfuse tracing disabled (no keys provided)")
-except Exception:
-    logger.warning("Langfuse not available - tracing disabled")
+except Exception as e:
+    logger.warning(f"Langfuse not available - tracing disabled: {e}")
     # Create a no-op decorator
     def observe(name=None):
         def decorator(func):
